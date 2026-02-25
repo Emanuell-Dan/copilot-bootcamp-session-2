@@ -1,11 +1,29 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Container,
+  List,
+  ListItem,
+  ListItemText,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import './App.css';
+
+const sortItemsByNameDesc = (items) => {
+  return [...items].sort((left, right) => right.name.localeCompare(left.name));
+};
 
 function App() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [newItem, setNewItem] = useState('');
+  const [dueDate, setDueDate] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -19,7 +37,7 @@ function App() {
         throw new Error('Network response was not ok');
       }
       const result = await response.json();
-      setData(result);
+      setData(sortItemsByNameDesc(result));
       setError(null);
     } catch (err) {
       setError('Failed to fetch data: ' + err.message);
@@ -39,7 +57,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: newItem }),
+        body: JSON.stringify({ name: newItem, due_date: dueDate || null }),
       });
 
       if (!response.ok) {
@@ -47,8 +65,10 @@ function App() {
       }
 
       const result = await response.json();
-      setData([...data, result]);
+      setData(sortItemsByNameDesc([...data, result]));
       setNewItem('');
+      setDueDate('');
+      setError(null);
     } catch (err) {
       setError('Error adding item: ' + err.message);
       console.error('Error adding item:', err);
@@ -74,53 +94,98 @@ function App() {
   };
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>To Do App</h1>
-        <p>Keep track of your tasks</p>
-      </header>
+    <Container maxWidth="md" className="App">
+      <Stack component="header" spacing={1} className="App-header">
+        <Typography component="h1" variant="h3">
+          To Do App
+        </Typography>
+        <Typography component="p" variant="body1">
+          Keep track of your tasks
+        </Typography>
+      </Stack>
 
-      <main>
-        <section className="add-item-section">
-          <h2>Add New Item</h2>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Enter item name"
-            />
-            <button type="submit">Add Item</button>
-          </form>
-        </section>
+      <Stack component="main" spacing={3}>
+        <Paper component="section" elevation={1} sx={{ p: 3 }}>
+          <Typography component="h2" variant="h5" gutterBottom>
+            Add New Item
+          </Typography>
+          <Box component="form" onSubmit={handleSubmit} noValidate>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                id="task-name"
+                label="Task name"
+                value={newItem}
+                onChange={(event) => setNewItem(event.target.value)}
+                fullWidth
+                required
+              />
+              <TextField
+                id="task-due-date"
+                label="Due date"
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+              <Button type="submit" variant="contained">
+                Add Item
+              </Button>
+            </Stack>
+          </Box>
+        </Paper>
 
-        <section className="items-section">
-          <h2>Items from Database</h2>
-          {loading && <p>Loading data...</p>}
-          {error && <p className="error">{error}</p>}
-          {!loading && !error && (
-            <ul>
-              {data.length > 0 ? (
-                data.map((item) => (
-                  <li key={item.id}>
-                    <span>{item.name}</span>
-                    <button 
+        <Paper component="section" elevation={1} sx={{ p: 3 }}>
+          <Typography component="h2" variant="h5" gutterBottom>
+            Items from Database
+          </Typography>
+
+          {loading && (
+            <Typography aria-live="polite" role="status">
+              Loading data...
+            </Typography>
+          )}
+
+          {error && (
+            <Alert severity="error" role="alert" aria-live="assertive">
+              {error}
+            </Alert>
+          )}
+
+          {!loading && !error && data.length === 0 && (
+            <Typography aria-live="polite" role="status">
+              No items found. Add some!
+            </Typography>
+          )}
+
+          {!loading && !error && data.length > 0 && (
+            <List aria-label="Task list">
+              {data.map((item) => (
+                <ListItem
+                  key={item.id}
+                  divider
+                  secondaryAction={
+                    <Button
                       onClick={() => handleDelete(item.id)}
-                      className="delete-btn"
+                      color="error"
                       type="button"
+                      variant="outlined"
+                      aria-label={`Delete ${item.name}`}
                     >
                       Delete
-                    </button>
-                  </li>
-                ))
-              ) : (
-                <p>No items found. Add some!</p>
-              )}
-            </ul>
+                    </Button>
+                  }
+                >
+                  <ListItemText
+                    primary={item.name}
+                    secondary={item.due_date ? `Due: ${item.due_date}` : 'Due: Not set'}
+                  />
+                </ListItem>
+              ))}
+            </List>
           )}
-        </section>
-      </main>
-    </div>
+        </Paper>
+      </Stack>
+    </Container>
   );
 }
 

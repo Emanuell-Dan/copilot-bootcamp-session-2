@@ -19,16 +19,30 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    due_date TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
 `);
 
 // Insert some initial data
 const initialItems = ['Item 1', 'Item 2', 'Item 3'];
-const insertStmt = db.prepare('INSERT INTO items (name) VALUES (?)');
+const insertStmt = db.prepare('INSERT INTO items (name, due_date) VALUES (?, ?)');
+
+const isValidDueDate = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return true;
+  }
+
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const parsedDate = Date.parse(value);
+  return Number.isFinite(parsedDate);
+};
 
 initialItems.forEach(item => {
-  insertStmt.run(item);
+  insertStmt.run(item, null);
 });
 
 console.log('In-memory database initialized with sample data');
@@ -36,7 +50,7 @@ console.log('In-memory database initialized with sample data');
 // API Routes
 app.get('/api/items', (req, res) => {
   try {
-    const items = db.prepare('SELECT * FROM items ORDER BY created_at DESC').all();
+    const items = db.prepare('SELECT * FROM items ORDER BY name DESC, id DESC').all();
     res.json(items);
   } catch (error) {
     console.error('Error fetching items:', error);
@@ -46,13 +60,18 @@ app.get('/api/items', (req, res) => {
 
 app.post('/api/items', (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, due_date: dueDate } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'Item name is required' });
     }
 
-    const result = insertStmt.run(name);
+    if (!isValidDueDate(dueDate)) {
+      return res.status(400).json({ error: 'Due date must be a valid date string' });
+    }
+
+    const normalizedDueDate = dueDate || null;
+    const result = insertStmt.run(name.trim(), normalizedDueDate);
     const id = result.lastInsertRowid;
 
     const newItem = db.prepare('SELECT * FROM items WHERE id = ?').get(id);

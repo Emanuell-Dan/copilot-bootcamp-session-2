@@ -9,10 +9,10 @@ afterAll(() => {
 });
 
 // Test helpers
-const createItem = async (name = 'Temp Item to Delete') => {
+const createItem = async (name = 'Temp Item to Delete', dueDate = null) => {
   const response = await request(app)
     .post('/api/items')
-    .send({ name })
+    .send({ name, due_date: dueDate })
     .set('Accept', 'application/json');
 
   expect(response.status).toBe(201);
@@ -33,13 +33,30 @@ describe('API Endpoints', () => {
       const item = response.body[0];
       expect(item).toHaveProperty('id');
       expect(item).toHaveProperty('name');
+      expect(item).toHaveProperty('due_date');
       expect(item).toHaveProperty('created_at');
+    });
+
+    it('should return items sorted by name in reverse alphabetical order', async () => {
+      await createItem('Alpha Task');
+      await createItem('Zulu Task');
+
+      const response = await request(app).get('/api/items');
+      expect(response.status).toBe(200);
+
+      const names = response.body.map((item) => item.name);
+      const alphaIndex = names.indexOf('Alpha Task');
+      const zuluIndex = names.indexOf('Zulu Task');
+
+      expect(alphaIndex).toBeGreaterThan(-1);
+      expect(zuluIndex).toBeGreaterThan(-1);
+      expect(zuluIndex).toBeLessThan(alphaIndex);
     });
   });
 
   describe('POST /api/items', () => {
     it('should create a new item', async () => {
-      const newItem = { name: 'Test Item' };
+      const newItem = { name: 'Test Item', due_date: '2026-03-15' };
       const response = await request(app)
         .post('/api/items')
         .send(newItem)
@@ -48,7 +65,19 @@ describe('API Endpoints', () => {
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('id');
       expect(response.body.name).toBe(newItem.name);
+      expect(response.body.due_date).toBe(newItem.due_date);
       expect(response.body).toHaveProperty('created_at');
+    });
+
+    it('should create a new item without due date', async () => {
+      const response = await request(app)
+        .post('/api/items')
+        .send({ name: 'No Due Date Item' })
+        .set('Accept', 'application/json');
+
+      expect(response.status).toBe(201);
+      expect(response.body.name).toBe('No Due Date Item');
+      expect(response.body.due_date).toBeNull();
     });
 
     it('should return 400 if name is missing', async () => {
@@ -71,6 +100,16 @@ describe('API Endpoints', () => {
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toBe('Item name is required');
+    });
+
+    it('should return 400 for invalid due date', async () => {
+      const response = await request(app)
+        .post('/api/items')
+        .send({ name: 'Invalid Due Date Item', due_date: 'not-a-date' })
+        .set('Accept', 'application/json');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error', 'Due date must be a valid date string');
     });
   });
 

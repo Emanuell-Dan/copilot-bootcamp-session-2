@@ -12,20 +12,27 @@ const server = setupServer(
     return res(
       ctx.status(200),
       ctx.json([
-        { id: 1, name: 'Test Item 1', created_at: '2023-01-01T00:00:00.000Z' },
-        { id: 2, name: 'Test Item 2', created_at: '2023-01-02T00:00:00.000Z' },
+        { id: 1, name: 'Zulu Task', due_date: '2026-04-01', created_at: '2023-01-01T00:00:00.000Z' },
+        { id: 2, name: 'Alpha Task', due_date: null, created_at: '2023-01-02T00:00:00.000Z' },
       ])
     );
   }),
   
   // POST /api/items handler
   rest.post('/api/items', (req, res, ctx) => {
-    const { name } = req.body;
+    const { name, due_date: dueDate } = req.body;
     
     if (!name || name.trim() === '') {
       return res(
         ctx.status(400),
         ctx.json({ error: 'Item name is required' })
+      );
+    }
+
+    if (dueDate && Number.isNaN(Date.parse(dueDate))) {
+      return res(
+        ctx.status(400),
+        ctx.json({ error: 'Due date must be a valid date string' })
       );
     }
     
@@ -34,9 +41,13 @@ const server = setupServer(
       ctx.json({
         id: 3,
         name,
+        due_date: dueDate || null,
         created_at: new Date().toISOString(),
       })
     );
+  }),
+  rest.delete('/api/items/:id', (req, res, ctx) => {
+    return res(ctx.status(200), ctx.json({ message: 'Item deleted successfully', id: Number(req.params.id) }));
   })
 );
 
@@ -50,8 +61,8 @@ describe('App Component', () => {
     await act(async () => {
       render(<App />);
     });
-    expect(screen.getByText('React Frontend with Node Backend')).toBeInTheDocument();
-    expect(screen.getByText('Connected to in-memory database')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'To Do App' })).toBeInTheDocument();
+    expect(screen.getByText('Keep track of your tasks')).toBeInTheDocument();
   });
 
   test('loads and displays items', async () => {
@@ -64,12 +75,14 @@ describe('App Component', () => {
     
     // Wait for items to load
     await waitFor(() => {
-      expect(screen.getByText('Test Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Test Item 2')).toBeInTheDocument();
+      expect(screen.getByText('Zulu Task')).toBeInTheDocument();
+      expect(screen.getByText('Alpha Task')).toBeInTheDocument();
+      expect(screen.getByText('Due: 2026-04-01')).toBeInTheDocument();
+      expect(screen.getByText('Due: Not set')).toBeInTheDocument();
     });
   });
 
-  test('adds a new item', async () => {
+  test('adds a new item with due date', async () => {
     const user = userEvent.setup();
     
     await act(async () => {
@@ -82,12 +95,15 @@ describe('App Component', () => {
     });
     
     // Fill in the form and submit
-    const input = screen.getByPlaceholderText('Enter item name');
+    const input = screen.getByRole('textbox', { name: /Task name/i });
+    const dueDateInput = screen.getByLabelText(/Due date/i);
+
     await act(async () => {
       await user.type(input, 'New Test Item');
+      await user.type(dueDateInput, '2026-12-31');
     });
     
-    const submitButton = screen.getByText('Add Item');
+    const submitButton = screen.getByRole('button', { name: 'Add Item' });
     await act(async () => {
       await user.click(submitButton);
     });
@@ -95,6 +111,34 @@ describe('App Component', () => {
     // Check that the new item appears
     await waitFor(() => {
       expect(screen.getByText('New Test Item')).toBeInTheDocument();
+      expect(screen.getByText('Due: 2026-12-31')).toBeInTheDocument();
+    });
+  });
+
+  test('keeps items sorted in reverse alphabetical order after add', async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading data...')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      await user.type(screen.getByRole('textbox', { name: /Task name/i }), 'Bravo Task');
+      await user.click(screen.getByRole('button', { name: 'Add Item' }));
+    });
+
+    await waitFor(() => {
+      const taskNames = screen
+        .getAllByRole('listitem')
+        .map((item) => item.textContent)
+        .join(' ');
+
+      expect(taskNames.indexOf('Zulu Task')).toBeLessThan(taskNames.indexOf('Bravo Task'));
+      expect(taskNames.indexOf('Bravo Task')).toBeLessThan(taskNames.indexOf('Alpha Task'));
     });
   });
 
